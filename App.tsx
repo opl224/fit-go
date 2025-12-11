@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   ArrowLeft, 
@@ -48,7 +47,6 @@ import {
   getAltitudeDisplay, 
   getSpeedDisplay 
 } from './utils';
-// Fix: Import the newly implemented coach insight service
 import { getCoachInsight } from './services/geminiService';
 
 declare const html2canvas: any;
@@ -93,7 +91,6 @@ const App: React.FC = () => {
   const [customAltitudeUnit, setCustomAltitudeUnit] = useState(() => localStorage.getItem('customAltitudeUnit') || 'm');
   const [profilePhoto, setProfilePhoto] = useState<string | null>(() => localStorage.getItem('profilePhoto'));
   
-  // Fix: Added state for AI Coach insights
   const [coachInsight, setCoachInsight] = useState<string | null>(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
 
@@ -169,20 +166,27 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('runHistory', JSON.stringify(runHistory)); }, [runHistory]);
 
   useEffect(() => {
-    if ('permissions' in navigator) {
-      // Fix: Casting 'geolocation' to any to avoid TypeScript error where it might be inferred as never
-      navigator.permissions.query({ name: 'geolocation' as any }).then((status) => {
-        setHasPermissions(status.state === 'granted');
-        status.onchange = () => setHasPermissions(status.state === 'granted');
-      });
-    } else {
-        // Fallback for older browsers or simple APK wrappers
-        navigator.geolocation.getCurrentPosition(
+    const checkPermissions = async () => {
+      try {
+        // Use any cast to avoid TS issues with the 'name' property on some environments
+        const nav = navigator as any;
+        if (nav.permissions && nav.permissions.query) {
+          const status = await nav.permissions.query({ name: 'geolocation' });
+          setHasPermissions(status.state === 'granted');
+          status.onchange = () => setHasPermissions(status.state === 'granted');
+        } else {
+          // Fallback
+          navigator.geolocation.getCurrentPosition(
             () => setHasPermissions(true),
             () => setHasPermissions(false),
             { timeout: 1000 }
-        );
-    }
+          );
+        }
+      } catch (err) {
+        setHasPermissions(null);
+      }
+    };
+    checkPermissions();
   }, []);
 
   const requestPermissions = useCallback(async () => {
@@ -195,8 +199,6 @@ const App: React.FC = () => {
   }, []);
 
   const openPhoneSettings = () => {
-      // Best effort to link to settings on web apps is usually impossible,
-      // but we provide clear instruction.
       triggerHaptic(50);
   };
 
@@ -300,7 +302,6 @@ const App: React.FC = () => {
       return () => window.removeEventListener('popstate', handlePopState);
   }, [currentScreen]);
 
-  // Fix: Effect to fetch Gemini Coach insight when entering summary screen
   useEffect(() => {
     let isMounted = true;
     if (currentScreen === 'summary') {
@@ -592,7 +593,6 @@ const App: React.FC = () => {
               </div>
           </div>
 
-          {/* ZEN MODE HUD */}
           <div className={`absolute bottom-12 left-0 w-full px-6 z-[600] transition-all duration-500 ease-in-out ${isZenMode ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20 pointer-events-none'}`}>
               <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-3xl rounded-[48px] p-8 border border-white/20 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.4)] flex justify-between items-center transition-colors">
                   <div className="flex flex-col items-center flex-1">
@@ -721,7 +721,6 @@ const App: React.FC = () => {
                         </div>
                      </div>
                      
-                     {/* Fix: Added Gemini Coach Insight section to the summary screen */}
                      <div className="bg-blue-50 dark:bg-blue-900/10 rounded-[32px] p-8 border border-blue-100 dark:border-blue-800/50 -mt-2">
                         <div className="flex items-center gap-3 mb-4">
                             <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/30">

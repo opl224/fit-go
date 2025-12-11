@@ -1,11 +1,18 @@
 import { GoogleGenAI } from "@google/genai";
 
+// Declare process for TypeScript to avoid build errors in browser environment
+declare var process: {
+  env: {
+    API_KEY: string;
+  };
+};
+
 /**
- * Fix: Implementation of the Gemini Coach service.
+ * Implementation of the Gemini Coach service.
  * This service analyzes a run session and returns a motivational insight using Gemini 2.5 Flash.
  */
 export const getCoachInsight = async (session: any, language: string) => {
-  // Always use the API key from process.env.API_KEY
+  // Always use the API key from process.env.API_KEY exactly as required
   if (!process.env.API_KEY) {
     console.error("API_KEY is not configured.");
     return null;
