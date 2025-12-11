@@ -141,16 +141,14 @@ export const RunMap: React.FC<RunMapProps> = ({
         const zoom = map.getZoom();
         const point = map.project(latLng, zoom);
         
-        // Corrected vertical offset logic
-        // When the bottom sheet covers e.g. 60% of screen, we want the marker to be
-        // at 20% from the top (centered in the remaining 40%).
-        // A positive pixel offset in targetPoint moves the map DOWN (marker moves UP).
-        // If sheet covers bottom, we want marker higher up.
-        const verticalOffset = isZenMode ? 0 : (isSheetExpanded ? 240 : 100); 
+        // Dynamic vertical offset based on UI state to keep marker visible
+        // Positive moves the map target DOWN, pushing the marker UP visually.
+        // If sheet is expanded, we need a larger offset to center the marker in the top half.
+        const verticalOffset = isZenMode ? 0 : (isSheetExpanded ? 220 : 100); 
         
         const targetPoint = point.add([0, verticalOffset]);
         const targetLatLng = map.unproject(targetPoint, zoom);
-        map.panTo(targetLatLng, { animate: true, duration: 1.0 });
+        map.panTo(targetLatLng, { animate: true, duration: 0.8 });
     }
   }, [currentLocation, isFollowingUser, isSheetExpanded, isZenMode, readOnly]);
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   ArrowLeft, 
@@ -29,7 +30,8 @@ import {
   Footprints,
   Tally4,
   ShieldCheck,
-  Settings
+  Settings,
+  AlertCircle
 } from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { RunMap } from './components/RunMap';
@@ -93,6 +95,7 @@ const App: React.FC = () => {
   
   const [coachInsight, setCoachInsight] = useState<string | null>(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const [audioCues, setAudioCues] = useState<AudioCuesSettings>(() => {
       try {
@@ -165,42 +168,59 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('customAltitudeUnit', customAltitudeUnit); }, [customAltitudeUnit]);
   useEffect(() => { localStorage.setItem('runHistory', JSON.stringify(runHistory)); }, [runHistory]);
 
-  useEffect(() => {
-    const checkPermissions = async () => {
-      try {
-        // Use any cast to avoid TS issues with the 'name' property on some environments
-        const nav = navigator as any;
-        if (nav.permissions && nav.permissions.query) {
-          const status = await nav.permissions.query({ name: 'geolocation' });
-          setHasPermissions(status.state === 'granted');
-          status.onchange = () => setHasPermissions(status.state === 'granted');
-        } else {
-          // Fallback
-          navigator.geolocation.getCurrentPosition(
-            () => setHasPermissions(true),
-            () => setHasPermissions(false),
-            { timeout: 1000 }
-          );
+  const checkPermissions = useCallback(async (silent = true) => {
+    try {
+      const nav = navigator as any;
+      if (nav.permissions && nav.permissions.query) {
+        const status = await nav.permissions.query({ name: 'geolocation' });
+        if (status.state === 'granted') {
+          setHasPermissions(true);
+          return true;
+        } else if (status.state === 'denied' && !silent) {
+          setPermissionError(t.permissionDenied);
+          setHasPermissions(false);
+          return false;
         }
-      } catch (err) {
-        setHasPermissions(null);
       }
-    };
-    checkPermissions();
-  }, []);
+      
+      // Secondary check: try to get a quick position
+      return new Promise<boolean>((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          () => { setHasPermissions(true); resolve(true); },
+          (err) => { 
+            if (!silent) setPermissionError(err.message);
+            setHasPermissions(false); 
+            resolve(false); 
+          },
+          { timeout: 3000 }
+        );
+      });
+    } catch (err) {
+      setHasPermissions(null);
+      return false;
+    }
+  }, [t.permissionDenied]);
+
+  useEffect(() => {
+    checkPermissions(true);
+  }, [checkPermissions]);
 
   const requestPermissions = useCallback(async () => {
     triggerHaptic(50);
+    setPermissionError(null);
     navigator.geolocation.getCurrentPosition(
-      () => { setHasPermissions(true); triggerHaptic(100); },
-      () => { setHasPermissions(false); },
-      { enableHighAccuracy: true, timeout: 5000 }
+      () => { 
+        setHasPermissions(true); 
+        triggerHaptic(100); 
+        setPermissionError(null);
+      },
+      (err) => { 
+        setHasPermissions(false);
+        setPermissionError(err.code === 1 ? t.permissionDenied : `${t.searching} (${err.message})`);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []);
-
-  const openPhoneSettings = () => {
-      triggerHaptic(50);
-  };
+  }, [t.permissionDenied, t.searching]);
 
   useEffect(() => {
     const savedActive = localStorage.getItem('activeSession');
@@ -494,19 +514,27 @@ const App: React.FC = () => {
     <div className={`font-sans antialiased selection:bg-blue-200 ${isDarkMode ? 'dark' : ''}`}>
       {currentScreen === 'login' && (
         <div className="h-screen w-screen bg-white dark:bg-gray-900 flex flex-col items-center justify-between p-10 transition-colors">
-            {hasPermissions === false && (
-              <div className="absolute inset-0 z-[1000] bg-white dark:bg-gray-900 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in">
+            {!hasPermissions && (
+              <div className="absolute inset-0 z-[1000] bg-white/95 dark:bg-gray-900/95 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in">
                  <div className="w-24 h-24 bg-blue-100 dark:bg-blue-900/40 rounded-[32px] flex items-center justify-center mb-8 text-blue-600 dark:text-blue-400 shadow-2xl shadow-blue-500/20">
                     <ShieldCheck size={48} />
                  </div>
                  <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase mb-4 tracking-tight leading-tight">{t.needPermission}</h2>
-                 <p className="text-gray-500 dark:text-gray-400 font-medium mb-10 leading-relaxed max-w-xs text-sm">{t.permissionDesc}</p>
+                 <p className="text-gray-500 dark:text-gray-400 font-medium mb-4 leading-relaxed max-w-xs text-sm">{t.permissionDesc}</p>
+                 
+                 {permissionError && (
+                   <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-xl mb-6 text-xs font-bold w-full max-w-xs animate-bounce">
+                      <AlertCircle size={14} />
+                      {permissionError}
+                   </div>
+                 )}
+
                  <div className="flex flex-col gap-3 w-full max-w-xs">
                     <button onClick={requestPermissions} className="w-full bg-blue-600 text-white font-black py-5 rounded-[24px] shadow-xl shadow-blue-500/20 active:scale-95 transition-all uppercase tracking-widest text-sm">
                         {t.grantPermission}
                     </button>
-                    <button onClick={openPhoneSettings} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-black py-5 rounded-[24px] active:scale-95 transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2">
-                        <Settings size={18} /> {t.openSettings}
+                    <button onClick={() => setCurrentScreen('dashboard')} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 font-black py-4 rounded-[24px] active:scale-95 transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
+                         {t.backHome}
                     </button>
                  </div>
               </div>
