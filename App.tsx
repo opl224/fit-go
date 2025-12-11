@@ -31,7 +31,10 @@ import {
   Tally4,
   ShieldCheck,
   Settings,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  X,
+  Info
 } from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { RunMap } from './components/RunMap';
@@ -96,6 +99,7 @@ const App: React.FC = () => {
   const [coachInsight, setCoachInsight] = useState<string | null>(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [showCustomConfirm, setShowCustomConfirm] = useState<{message: string, onConfirm: () => void} | null>(null);
 
   const [audioCues, setAudioCues] = useState<AudioCuesSettings>(() => {
       try {
@@ -123,7 +127,10 @@ const App: React.FC = () => {
   });
   
   const [currentScreen, setCurrentScreen] = useState<Screen>('login');
-  const [hasPermissions, setHasPermissions] = useState<boolean | null>(null);
+  const [hasPermissions, setHasPermissions] = useState<boolean | null>(() => {
+    const saved = localStorage.getItem('hasPermissions');
+    return saved === 'true';
+  });
   const t = translations[language];
 
   const [selectedRunType, setSelectedRunType] = useState<string>('Run');
@@ -168,54 +175,25 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('customAltitudeUnit', customAltitudeUnit); }, [customAltitudeUnit]);
   useEffect(() => { localStorage.setItem('runHistory', JSON.stringify(runHistory)); }, [runHistory]);
 
-  const checkPermissions = useCallback(async (silent = true) => {
-    try {
-      const nav = navigator as any;
-      if (nav.permissions && nav.permissions.query) {
-        const status = await nav.permissions.query({ name: 'geolocation' });
-        if (status.state === 'granted') {
-          setHasPermissions(true);
-          return true;
-        } else if (status.state === 'denied' && !silent) {
-          setPermissionError(t.permissionDenied);
-          setHasPermissions(false);
-          return false;
-        }
-      }
-      
-      // Secondary check: try to get a quick position
-      return new Promise<boolean>((resolve) => {
-        navigator.geolocation.getCurrentPosition(
-          () => { setHasPermissions(true); resolve(true); },
-          (err) => { 
-            if (!silent) setPermissionError(err.message);
-            setHasPermissions(false); 
-            resolve(false); 
-          },
-          { timeout: 3000 }
-        );
-      });
-    } catch (err) {
-      setHasPermissions(null);
-      return false;
-    }
-  }, [t.permissionDenied]);
-
-  useEffect(() => {
-    checkPermissions(true);
-  }, [checkPermissions]);
-
   const requestPermissions = useCallback(async () => {
     triggerHaptic(50);
     setPermissionError(null);
+    
+    // Attempt to get location to trigger system prompt
     navigator.geolocation.getCurrentPosition(
       () => { 
-        setHasPermissions(true); 
+        setHasPermissions(true);
+        localStorage.setItem('hasPermissions', 'true');
         triggerHaptic(100); 
         setPermissionError(null);
+        // Also trigger camera as it's requested in APK
+        try {
+            navigator.mediaDevices.getUserMedia({ video: true }).then(s => s.getTracks().forEach(t => t.stop())).catch(() => {});
+        } catch (e) {}
       },
       (err) => { 
         setHasPermissions(false);
+        localStorage.setItem('hasPermissions', 'false');
         setPermissionError(err.code === 1 ? t.permissionDenied : `${t.searching} (${err.message})`);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -512,6 +490,23 @@ const App: React.FC = () => {
 
   return (
     <div className={`font-sans antialiased selection:bg-blue-200 ${isDarkMode ? 'dark' : ''}`}>
+      {/* CUSTOM CONFIRM MODAL TO AVOID "DOMAIN SAYS" */}
+      {showCustomConfirm && (
+          <div className="fixed inset-0 z-[5000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
+              <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-[32px] p-8 shadow-2xl border border-gray-100 dark:border-gray-800 animate-in zoom-in">
+                  <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mb-6 text-blue-600 dark:text-blue-400">
+                      <Info size={32} />
+                  </div>
+                  <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 uppercase tracking-tight leading-tight">{t.confirmClear || 'Confirmation'}</h3>
+                  <p className="text-gray-500 dark:text-gray-400 font-bold text-sm mb-8 leading-relaxed uppercase tracking-wide opacity-80">{showCustomConfirm.message}</p>
+                  <div className="flex gap-3">
+                      <button onClick={() => setShowCustomConfirm(null)} className="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-black py-4 rounded-2xl uppercase tracking-widest text-xs active:scale-95 transition-all">{t.cancel}</button>
+                      <button onClick={() => { showCustomConfirm.onConfirm(); setShowCustomConfirm(null); }} className="flex-1 bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-500/20 uppercase tracking-widest text-xs active:scale-95 transition-all">{t.save}</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {currentScreen === 'login' && (
         <div className="h-screen w-screen bg-white dark:bg-gray-900 flex flex-col items-center justify-between p-10 transition-colors">
             {!hasPermissions && (
@@ -533,7 +528,7 @@ const App: React.FC = () => {
                     <button onClick={requestPermissions} className="w-full bg-blue-600 text-white font-black py-5 rounded-[24px] shadow-xl shadow-blue-500/20 active:scale-95 transition-all uppercase tracking-widest text-sm">
                         {t.grantPermission}
                     </button>
-                    <button onClick={() => setCurrentScreen('dashboard')} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 font-black py-4 rounded-[24px] active:scale-95 transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
+                    <button onClick={() => { setHasPermissions(true); setCurrentScreen('dashboard'); }} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 font-black py-4 rounded-[24px] active:scale-95 transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
                          {t.backHome}
                     </button>
                  </div>
@@ -784,7 +779,12 @@ const App: React.FC = () => {
       )}
 
       {currentScreen === 'profile' && (
-         <ProfileScreen onBack={handleBack} userName={userName} setUserName={setUserName} profilePhoto={profilePhoto} setProfilePhoto={setProfilePhoto} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} language={language} setLanguage={setLanguage} unitSystem={unitSystem} setUnitSystem={setUnitSystem} customDistanceUnit={customDistanceUnit} setCustomDistanceUnit={setCustomDistanceUnit} customAltitudeUnit={customAltitudeUnit} setCustomAltitudeUnit={setCustomAltitudeUnit} audioCues={audioCues} setAudioCues={setAudioCues} paceZones={paceZones} setPaceZones={setPaceZones} t={t} />
+         <ProfileScreen onBack={handleBack} userName={userName} setUserName={setUserName} profilePhoto={profilePhoto} setProfilePhoto={setProfilePhoto} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} language={language} setLanguage={setLanguage} unitSystem={unitSystem} setUnitSystem={setUnitSystem} customDistanceUnit={customDistanceUnit} setCustomDistanceUnit={setCustomDistanceUnit} customAltitudeUnit={customAltitudeUnit} setCustomAltitudeUnit={setCustomAltitudeUnit} audioCues={audioCues} setAudioCues={setAudioCues} paceZones={paceZones} setPaceZones={setPaceZones} t={t} onClearCache={() => setShowCustomConfirm({ message: t.confirmClear, onConfirm: async () => {
+             if ('caches' in window) {
+                const keys = await caches.keys();
+                for (const key of keys) if (key.includes('gemini-run-map-cache')) await caches.delete(key);
+             }
+         }})} />
        )}
     </div>
   );

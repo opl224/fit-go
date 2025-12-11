@@ -16,7 +16,8 @@ import {
   Plus,
   Trash2,
   Tally4,
-  Settings2
+  ShieldCheck,
+  ChevronRight
 } from 'lucide-react';
 import { Language, UnitSystem, AudioCuesSettings, PaceZone } from '../types';
 
@@ -40,6 +41,7 @@ interface ProfileScreenProps {
   setAudioCues: (settings: AudioCuesSettings) => void;
   paceZones: PaceZone[];
   setPaceZones: (zones: PaceZone[]) => void;
+  onClearCache: () => void;
   t: any; // Translation object
 }
 
@@ -63,6 +65,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setAudioCues,
   paceZones,
   setPaceZones,
+  onClearCache,
   t
 }) => {
   const [editNameValue, setEditNameValue] = useState(userName);
@@ -115,20 +118,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       setAudioCues({ ...audioCues, alertFrequency: freq });
   };
 
-  const clearMapCache = async () => {
-    if ('caches' in window) {
-        try {
-            const keys = await caches.keys();
-            for (const key of keys) {
-                if (key.includes('gemini-run-map-cache')) {
-                    await caches.delete(key);
-                }
-            }
-            alert(t.cacheCleared);
-        } catch (e) { console.error(e); }
-    }
-  };
-
   const addPaceZone = () => {
     const newZone: PaceZone = {
       id: Date.now().toString(),
@@ -146,6 +135,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const deleteZone = (id: string) => {
     setPaceZones(paceZones.filter(z => z.id !== id));
+  };
+
+  const openAppSystemSettings = () => {
+      // In a real APK environment using Capacitor, we'd use a plugin.
+      // Here we just guide the user.
+      triggerHaptic(100);
+      alert(t.permissionDesc);
+  };
+
+  const triggerHaptic = (pattern: number | number[] = 50) => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(pattern);
+    }
   };
 
   return (
@@ -191,6 +193,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </div>
 
                 <div className="grid gap-4">
+                    {/* Device Permissions Guide */}
+                    <div onClick={openAppSystemSettings} className="flex items-center justify-between p-5 bg-blue-50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-800/50 group active:scale-[0.98] cursor-pointer">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/30"><ShieldCheck size={20} /></div>
+                            <div className="flex flex-col">
+                                <span className="font-bold text-blue-900 dark:text-blue-100">{t.grantPermission}</span>
+                                <span className="text-[10px] font-black text-blue-500 uppercase tracking-wider">{t.openSettings}</span>
+                            </div>
+                        </div>
+                        <ChevronRight size={18} className="text-blue-400" />
+                    </div>
+
                     <div className="flex items-center justify-between p-5 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800">
                         <div className="flex items-center gap-4">
                             <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl text-purple-600 dark:text-purple-400"><Moon size={20} /></div>
@@ -345,7 +359,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                                 <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider">{t.cacheInfo}</span>
                             </div>
                         </div>
-                        <button onClick={clearMapCache} className="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl active:scale-95 transition-all">
+                        <button onClick={onClearCache} className="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl active:scale-95 transition-all">
                             <span className="text-xs font-black">{t.clearCache}</span>
                         </button>
                     </div>
