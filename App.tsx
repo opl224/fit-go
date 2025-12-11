@@ -28,7 +28,8 @@ import {
   SignalMedium,
   SignalHigh,
   Footprints,
-  Tally4
+  Tally4,
+  ShieldCheck
 } from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { RunMap } from './components/RunMap';
@@ -49,7 +50,6 @@ import {
 
 declare const html2canvas: any;
 
-// Fix: Replaced 'Round.sin' with 'Math.sin' as 'Round' is not a valid math reference in standard JavaScript/TypeScript.
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -117,6 +117,7 @@ const App: React.FC = () => {
   });
   
   const [currentScreen, setCurrentScreen] = useState<Screen>('login');
+  const [hasPermissions, setHasPermissions] = useState<boolean | null>(null);
   const t = translations[language];
 
   const [selectedRunType, setSelectedRunType] = useState<string>('Run');
@@ -146,7 +147,7 @@ const App: React.FC = () => {
   const lastDistanceSpeechKmRef = useRef<number>(0);
   const summaryRef = useRef<HTMLDivElement>(null);
 
-  // Sync settings and state to localStorage whenever they change
+  // Sync settings
   useEffect(() => {
     if (isDarkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
@@ -161,6 +162,25 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('customDistanceUnit', customDistanceUnit); }, [customDistanceUnit]);
   useEffect(() => { localStorage.setItem('customAltitudeUnit', customAltitudeUnit); }, [customAltitudeUnit]);
   useEffect(() => { localStorage.setItem('runHistory', JSON.stringify(runHistory)); }, [runHistory]);
+
+  // Check Permissions
+  useEffect(() => {
+    if ('permissions' in navigator) {
+      navigator.permissions.query({ name: 'geolocation' as PermissionName }).then((status) => {
+        setHasPermissions(status.state === 'granted');
+        status.onchange = () => setHasPermissions(status.state === 'granted');
+      });
+    }
+  }, []);
+
+  const requestPermissions = async () => {
+    triggerHaptic(50);
+    navigator.geolocation.getCurrentPosition(
+      () => { setHasPermissions(true); triggerHaptic(100); },
+      () => { setHasPermissions(false); alert(t.permissionDenied); },
+      { enableHighAccuracy: true }
+    );
+  };
 
   // Handle active session persistence
   useEffect(() => {
@@ -228,7 +248,6 @@ const App: React.FC = () => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRunning]);
 
-  // Audio Cues
   useEffect(() => {
       if (isRunning && audioCues.enabled) {
           const freq = audioCues.alertFrequency || 60;
@@ -434,15 +453,25 @@ const App: React.FC = () => {
     <div className={`font-sans antialiased selection:bg-blue-200 ${isDarkMode ? 'dark' : ''}`}>
       {currentScreen === 'login' && (
         <div className="h-screen w-screen bg-white dark:bg-gray-900 flex flex-col items-center justify-between p-10 transition-colors">
+            {!hasPermissions && (
+              <div className="absolute inset-0 z-[1000] bg-white/90 dark:bg-gray-900/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center">
+                 <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/40 rounded-3xl flex items-center justify-center mb-6 text-blue-600 dark:text-blue-400">
+                    <ShieldCheck size={40} />
+                 </div>
+                 <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase mb-4 tracking-tight">{t.needPermission}</h2>
+                 <p className="text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed max-w-xs">{t.permissionDesc}</p>
+                 <button onClick={requestPermissions} className="w-full max-w-xs bg-blue-600 text-white font-black py-5 rounded-[24px] shadow-xl shadow-blue-500/20 active:scale-95 transition-all uppercase tracking-widest text-sm">
+                    {t.grantPermission}
+                 </button>
+              </div>
+            )}
+            
             <div className="flex-1 flex flex-col justify-center items-center">
                 <div className="w-40 h-40 mb-10 drop-shadow-[0_25px_40px_rgba(59,130,246,0.4)] animate-[bounce_3s_infinite] transition-transform duration-700">
                     <img 
                         src="/barbel.png" 
                         alt="Fit Go Logo" 
-                        onError={(e) => {
-                           // Robust fallback if local file fails
-                           (e.target as HTMLImageElement).src = "https://cdn-icons-png.flaticon.com/512/3144/3144837.png";
-                        }}
+                        onError={(e) => { (e.target as HTMLImageElement).src = "https://cdn-icons-png.flaticon.com/512/3144/3144837.png"; }}
                         className="w-full h-full object-contain"
                     />
                 </div>
@@ -498,7 +527,6 @@ const App: React.FC = () => {
                         </div>
                     </div>
                 </div>
-
                 {currentZone && (
                   <div className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest text-white shadow-lg animate-in fade-in slide-in-from-top-2" style={{ backgroundColor: currentZone.color }}>
                       {currentZone.name}
@@ -519,6 +547,7 @@ const App: React.FC = () => {
               </div>
           </div>
 
+          {/* ZEN MODE HUD - Refined high contrast labels and black text */}
           <div className={`absolute bottom-12 left-0 w-full px-6 z-[600] transition-all duration-500 ease-in-out ${isZenMode ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20 pointer-events-none'}`}>
               <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-3xl rounded-[48px] p-8 border border-white/20 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.4)] flex justify-between items-center transition-colors">
                   <div className="flex flex-col items-center flex-1">

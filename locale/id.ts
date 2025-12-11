@@ -115,5 +115,9 @@ export const id = {
   minPace: "Pace Min",
   maxPace: "Pace Maks",
   zoneColor: "Warna",
-  currentZone: "Zona Saat Ini"
+  currentZone: "Zona Saat Ini",
+  needPermission: "Izin Diperlukan",
+  permissionDesc: "Fit GO memerlukan izin lokasi dan kamera untuk melacak aktivitas Anda dengan akurat.",
+  grantPermission: "Berikan Izin",
+  permissionDenied: "Izin ditolak. Silakan aktifkan lokasi di pengaturan ponsel Anda."
 };

@@ -25,8 +25,6 @@ interface RunMapProps {
   paceZones?: PaceZone[];
   onToggleFollow?: () => void;
   onToggleZenMode?: () => void;
-  onClearCache?: () => void;
-  confirmClearText?: string;
 }
 
 const triggerHaptic = (pattern: number | number[] = 50) => {
@@ -151,8 +149,8 @@ export const RunMap: React.FC<RunMapProps> = ({
         const point = map.project(latLng, zoom);
         
         // Refined vertical offset to keep user marker visible in the top half
-        // Positive moves marker UP. We want it lower than before.
-        const verticalOffset = isSheetExpanded ? 140 : 60; 
+        // Positive moves map UP relative to the marker.
+        const verticalOffset = isSheetExpanded ? 220 : 80; 
         
         const targetPoint = point.add([0, verticalOffset]);
         const targetLatLng = map.unproject(targetPoint, zoom);
@@ -164,11 +162,9 @@ export const RunMap: React.FC<RunMapProps> = ({
     const map = mapInstanceRef.current;
     if (!map || !path || !Array.isArray(path) || path.length === 0) return;
     
-    // Clear old polylines
     polylinesRef.current.forEach(p => map.removeLayer(p));
     polylinesRef.current = [];
 
-    // Simple segmentation for colored path
     let currentSegment: any[] = [];
     let lastZoneId: string | undefined = path[0].paceZoneId;
 
@@ -177,17 +173,14 @@ export const RunMap: React.FC<RunMapProps> = ({
         if (point.paceZoneId === lastZoneId) {
             currentSegment.push(latLng);
         } else {
-            // New zone segment
             const color = paceZones.find(z => z.id === lastZoneId)?.color || '#2563eb';
             const poly = L.polyline(currentSegment, { color, weight: 6, opacity: 0.9, lineJoin: 'round' }).addTo(map);
             polylinesRef.current.push(poly);
-            
             currentSegment = [currentSegment[currentSegment.length - 1], latLng];
             lastZoneId = point.paceZoneId;
         }
     });
 
-    // Final segment
     if (currentSegment.length > 0) {
         const color = paceZones.find(z => z.id === lastZoneId)?.color || '#2563eb';
         const poly = L.polyline(currentSegment, { color, weight: 6, opacity: 0.9, lineJoin: 'round' }).addTo(map);

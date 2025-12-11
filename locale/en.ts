@@ -115,5 +115,9 @@ export const en = {
   minPace: "Min Pace",
   maxPace: "Max Pace",
   zoneColor: "Color",
-  currentZone: "Current Zone"
+  currentZone: "Current Zone",
+  needPermission: "Permission Required",
+  permissionDesc: "Fit GO needs location and camera permissions to track your activity accurately.",
+  grantPermission: "Grant Permission",
+  permissionDenied: "Permission denied. Please enable location in your phone settings."
 };
