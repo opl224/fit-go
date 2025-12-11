@@ -117,7 +117,10 @@ export const id = {
   zoneColor: "Warna",
   currentZone: "Zona Saat Ini",
   needPermission: "Izin Diperlukan",
-  permissionDesc: "Fit GO memerlukan izin lokasi dan kamera untuk melacak aktivitas Anda dengan akurat.",
+  permissionDesc: "Fit GO memerlukan izin lokasi untuk melacak aktivitas Anda dengan akurat. Silakan aktifkan di pengaturan HP jika jendela izin tidak muncul.",
   grantPermission: "Berikan Izin",
-  permissionDenied: "Izin ditolak. Silakan aktifkan lokasi di pengaturan ponsel Anda."
+  permissionDenied: "Izin lokasi ditolak.",
+  openSettings: "Buka Pengaturan",
+  custom: "Kustom",
+  spmLabel: "spm"
 };

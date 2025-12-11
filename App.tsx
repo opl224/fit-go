@@ -29,7 +29,8 @@ import {
   SignalHigh,
   Footprints,
   Tally4,
-  ShieldCheck
+  ShieldCheck,
+  Settings
 } from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { RunMap } from './components/RunMap';
@@ -47,6 +48,8 @@ import {
   getAltitudeDisplay, 
   getSpeedDisplay 
 } from './utils';
+// Fix: Import the newly implemented coach insight service
+import { getCoachInsight } from './services/geminiService';
 
 declare const html2canvas: any;
 
@@ -79,7 +82,6 @@ const speak = (text: string) => {
 const translations = { en, id };
 
 const App: React.FC = () => {
-  // Persistence Initialization
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('isDarkMode');
     return saved === null ? window.matchMedia('(prefers-color-scheme: dark)').matches : saved === 'true';
@@ -91,6 +93,10 @@ const App: React.FC = () => {
   const [customAltitudeUnit, setCustomAltitudeUnit] = useState(() => localStorage.getItem('customAltitudeUnit') || 'm');
   const [profilePhoto, setProfilePhoto] = useState<string | null>(() => localStorage.getItem('profilePhoto'));
   
+  // Fix: Added state for AI Coach insights
+  const [coachInsight, setCoachInsight] = useState<string | null>(null);
+  const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
+
   const [audioCues, setAudioCues] = useState<AudioCuesSettings>(() => {
       try {
           const saved = localStorage.getItem('audioCues');
@@ -147,7 +153,6 @@ const App: React.FC = () => {
   const lastDistanceSpeechKmRef = useRef<number>(0);
   const summaryRef = useRef<HTMLDivElement>(null);
 
-  // Sync settings
   useEffect(() => {
     if (isDarkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
@@ -163,26 +168,38 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('customAltitudeUnit', customAltitudeUnit); }, [customAltitudeUnit]);
   useEffect(() => { localStorage.setItem('runHistory', JSON.stringify(runHistory)); }, [runHistory]);
 
-  // Check Permissions
   useEffect(() => {
     if ('permissions' in navigator) {
-      navigator.permissions.query({ name: 'geolocation' as PermissionName }).then((status) => {
+      // Fix: Casting 'geolocation' to any to avoid TypeScript error where it might be inferred as never
+      navigator.permissions.query({ name: 'geolocation' as any }).then((status) => {
         setHasPermissions(status.state === 'granted');
         status.onchange = () => setHasPermissions(status.state === 'granted');
       });
+    } else {
+        // Fallback for older browsers or simple APK wrappers
+        navigator.geolocation.getCurrentPosition(
+            () => setHasPermissions(true),
+            () => setHasPermissions(false),
+            { timeout: 1000 }
+        );
     }
   }, []);
 
-  const requestPermissions = async () => {
+  const requestPermissions = useCallback(async () => {
     triggerHaptic(50);
     navigator.geolocation.getCurrentPosition(
       () => { setHasPermissions(true); triggerHaptic(100); },
-      () => { setHasPermissions(false); alert(t.permissionDenied); },
-      { enableHighAccuracy: true }
+      () => { setHasPermissions(false); },
+      { enableHighAccuracy: true, timeout: 5000 }
     );
+  }, []);
+
+  const openPhoneSettings = () => {
+      // Best effort to link to settings on web apps is usually impossible,
+      // but we provide clear instruction.
+      triggerHaptic(50);
   };
 
-  // Handle active session persistence
   useEffect(() => {
     const savedActive = localStorage.getItem('activeSession');
     if (savedActive) {
@@ -282,6 +299,30 @@ const App: React.FC = () => {
       window.addEventListener('popstate', handlePopState);
       return () => window.removeEventListener('popstate', handlePopState);
   }, [currentScreen]);
+
+  // Fix: Effect to fetch Gemini Coach insight when entering summary screen
+  useEffect(() => {
+    let isMounted = true;
+    if (currentScreen === 'summary') {
+      const session = selectedHistorySession || lastSession;
+      if (session && !coachInsight && !isGeneratingInsight) {
+        setIsGeneratingInsight(true);
+        getCoachInsight(session, language).then(insight => {
+          if (isMounted) {
+            setCoachInsight(insight || null);
+            setIsGeneratingInsight(false);
+          }
+        }).catch(err => {
+          console.error(err);
+          if (isMounted) setIsGeneratingInsight(false);
+        });
+      }
+    } else {
+      setCoachInsight(null);
+      setIsGeneratingInsight(false);
+    }
+    return () => { isMounted = false; };
+  }, [currentScreen, selectedHistorySession, lastSession, language]);
 
   const currentZone = useMemo(() => {
     if (currentPace <= 0) return null;
@@ -383,7 +424,7 @@ const App: React.FC = () => {
       setRunHistory(prev => {
           const updated = prev.filter(s => String(s.id) !== String(sessionId));
           localStorage.setItem('runHistory', JSON.stringify(updated));
-          return updated; 
+          return [...updated]; 
       });
   }, []);
 
@@ -409,9 +450,8 @@ const App: React.FC = () => {
                   if (json.customAltitudeUnit) setCustomAltitudeUnit(json.customAltitudeUnit);
                   if (json.audioCues) setAudioCues(json.audioCues);
                   if (json.paceZones) setPaceZones(json.paceZones);
-                  alert(t.importSuccess);
               }
-          } catch (err) { alert(t.importError); }
+          } catch (err) { }
       };
       reader.readAsText(file);
   };
@@ -453,16 +493,21 @@ const App: React.FC = () => {
     <div className={`font-sans antialiased selection:bg-blue-200 ${isDarkMode ? 'dark' : ''}`}>
       {currentScreen === 'login' && (
         <div className="h-screen w-screen bg-white dark:bg-gray-900 flex flex-col items-center justify-between p-10 transition-colors">
-            {!hasPermissions && (
-              <div className="absolute inset-0 z-[1000] bg-white/90 dark:bg-gray-900/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center">
-                 <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/40 rounded-3xl flex items-center justify-center mb-6 text-blue-600 dark:text-blue-400">
-                    <ShieldCheck size={40} />
+            {hasPermissions === false && (
+              <div className="absolute inset-0 z-[1000] bg-white dark:bg-gray-900 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in">
+                 <div className="w-24 h-24 bg-blue-100 dark:bg-blue-900/40 rounded-[32px] flex items-center justify-center mb-8 text-blue-600 dark:text-blue-400 shadow-2xl shadow-blue-500/20">
+                    <ShieldCheck size={48} />
                  </div>
-                 <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase mb-4 tracking-tight">{t.needPermission}</h2>
-                 <p className="text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed max-w-xs">{t.permissionDesc}</p>
-                 <button onClick={requestPermissions} className="w-full max-w-xs bg-blue-600 text-white font-black py-5 rounded-[24px] shadow-xl shadow-blue-500/20 active:scale-95 transition-all uppercase tracking-widest text-sm">
-                    {t.grantPermission}
-                 </button>
+                 <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase mb-4 tracking-tight leading-tight">{t.needPermission}</h2>
+                 <p className="text-gray-500 dark:text-gray-400 font-medium mb-10 leading-relaxed max-w-xs text-sm">{t.permissionDesc}</p>
+                 <div className="flex flex-col gap-3 w-full max-w-xs">
+                    <button onClick={requestPermissions} className="w-full bg-blue-600 text-white font-black py-5 rounded-[24px] shadow-xl shadow-blue-500/20 active:scale-95 transition-all uppercase tracking-widest text-sm">
+                        {t.grantPermission}
+                    </button>
+                    <button onClick={openPhoneSettings} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-black py-5 rounded-[24px] active:scale-95 transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2">
+                        <Settings size={18} /> {t.openSettings}
+                    </button>
+                 </div>
               </div>
             )}
             
@@ -537,7 +582,7 @@ const App: React.FC = () => {
 
           <div className={`absolute top-0 left-0 w-full p-6 pt-12 flex flex-col gap-3 z-[400] transition-all duration-500 ${isZenMode ? 'opacity-0 -translate-y-10 pointer-events-none' : 'opacity-100 translate-y-0'}`}>
               <div className="flex justify-between items-center w-full">
-                <button onClick={handleBack} className="w-11 h-11 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-transform">
+                <button onClick={handleBack} className="w-11 h-11 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-transform border border-gray-100 dark:border-white/5">
                     <ArrowLeft size={22} className="text-gray-900 dark:text-white" />
                 </button>
                 <div className="bg-gray-900/95 dark:bg-gray-800/95 backdrop-blur-xl px-4 py-2 rounded-2xl shadow-xl text-[10px] font-black uppercase text-white flex items-center gap-2 border border-white/10">
@@ -547,7 +592,7 @@ const App: React.FC = () => {
               </div>
           </div>
 
-          {/* ZEN MODE HUD - Refined high contrast labels and black text */}
+          {/* ZEN MODE HUD */}
           <div className={`absolute bottom-12 left-0 w-full px-6 z-[600] transition-all duration-500 ease-in-out ${isZenMode ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20 pointer-events-none'}`}>
               <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-3xl rounded-[48px] p-8 border border-white/20 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.4)] flex justify-between items-center transition-colors">
                   <div className="flex flex-col items-center flex-1">
@@ -609,7 +654,7 @@ const App: React.FC = () => {
                           </div>
                           <span className="text-xl font-black text-gray-900 dark:text-gray-100 tabular-nums">
                               {currentSPM}
-                              <span className="text-[9px] font-bold text-gray-400 ml-1 uppercase tracking-tighter">spm</span>
+                              <span className="text-[9px] font-bold text-gray-400 ml-1 uppercase tracking-tighter">{t.spmLabel}</span>
                           </span>
                       </div>
                   </div>
@@ -675,6 +720,28 @@ const App: React.FC = () => {
                             <p className="text-[9px] uppercase font-black text-gray-400 mt-2 tracking-widest opacity-60">{t.steps}</p>
                         </div>
                      </div>
+                     
+                     {/* Fix: Added Gemini Coach Insight section to the summary screen */}
+                     <div className="bg-blue-50 dark:bg-blue-900/10 rounded-[32px] p-8 border border-blue-100 dark:border-blue-800/50 -mt-2">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/30">
+                                <Zap size={20} fill="currentColor" />
+                            </div>
+                            <h3 className="font-black text-blue-900 dark:text-blue-100 uppercase text-xs tracking-[0.2em]">{t.aiCoach}</h3>
+                        </div>
+                        {isGeneratingInsight ? (
+                            <div className="flex flex-col gap-3 animate-pulse">
+                                <div className="h-4 bg-blue-200 dark:bg-blue-800/40 rounded-full w-3/4"></div>
+                                <div className="h-4 bg-blue-200 dark:bg-blue-800/40 rounded-full w-full"></div>
+                                <div className="h-4 bg-blue-200 dark:bg-blue-800/40 rounded-full w-1/2"></div>
+                            </div>
+                        ) : (
+                            <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed font-bold italic opacity-90">
+                                {coachInsight || t.generatingInsight}
+                            </p>
+                        )}
+                     </div>
+
                      <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase justify-center opacity-40 tracking-widest">
                         <Calendar size={14} />
                         <span>{new Date((selectedHistorySession || lastSession)!.startTime).toLocaleString()}</span>

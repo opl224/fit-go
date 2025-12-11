@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { GeoPoint, PaceZone } from '../types';
 
-// Declare Leaflet globally since it's loaded via CDN
 declare const L: any;
 
 interface RunMapProps {
@@ -114,17 +113,11 @@ export const RunMap: React.FC<RunMapProps> = ({
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || typeof L === 'undefined') return;
-
     if (tileLayerRef.current) map.removeLayer(tileLayerRef.current);
-
     const tileUrl = isDarkMode 
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
         : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-    
-    tileLayerRef.current = L.tileLayer(tileUrl, {
-      maxZoom: 20,
-      crossOrigin: true 
-    }).addTo(map);
+    tileLayerRef.current = L.tileLayer(tileUrl, { maxZoom: 20, crossOrigin: true }).addTo(map);
   }, [isDarkMode]);
 
   useEffect(() => {
@@ -148,26 +141,26 @@ export const RunMap: React.FC<RunMapProps> = ({
         const zoom = map.getZoom();
         const point = map.project(latLng, zoom);
         
-        // Refined vertical offset to keep user marker visible in the top half
-        // Positive moves map UP relative to the marker.
-        const verticalOffset = isSheetExpanded ? 220 : 80; 
+        // Corrected vertical offset logic
+        // When the bottom sheet covers e.g. 60% of screen, we want the marker to be
+        // at 20% from the top (centered in the remaining 40%).
+        // A positive pixel offset in targetPoint moves the map DOWN (marker moves UP).
+        // If sheet covers bottom, we want marker higher up.
+        const verticalOffset = isZenMode ? 0 : (isSheetExpanded ? 240 : 100); 
         
         const targetPoint = point.add([0, verticalOffset]);
         const targetLatLng = map.unproject(targetPoint, zoom);
         map.panTo(targetLatLng, { animate: true, duration: 1.0 });
     }
-  }, [currentLocation, isFollowingUser, isSheetExpanded, readOnly]);
+  }, [currentLocation, isFollowingUser, isSheetExpanded, isZenMode, readOnly]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !path || !Array.isArray(path) || path.length === 0) return;
-    
     polylinesRef.current.forEach(p => map.removeLayer(p));
     polylinesRef.current = [];
-
     let currentSegment: any[] = [];
     let lastZoneId: string | undefined = path[0].paceZoneId;
-
     path.forEach((point, index) => {
         const latLng = [point.latitude, point.longitude];
         if (point.paceZoneId === lastZoneId) {
@@ -180,18 +173,15 @@ export const RunMap: React.FC<RunMapProps> = ({
             lastZoneId = point.paceZoneId;
         }
     });
-
     if (currentSegment.length > 0) {
         const color = paceZones.find(z => z.id === lastZoneId)?.color || '#2563eb';
         const poly = L.polyline(currentSegment, { color, weight: 6, opacity: 0.9, lineJoin: 'round' }).addTo(map);
         polylinesRef.current.push(poly);
     }
-
     if (readOnly && polylinesRef.current.length > 0) {
         const group = L.featureGroup(polylinesRef.current);
         map.fitBounds(group.getBounds(), { padding: [40, 40] });
     }
-
     pathRef.current = path;
   }, [path, readOnly, paceZones]);
 
@@ -205,7 +195,6 @@ export const RunMap: React.FC<RunMapProps> = ({
   return (
     <div className="absolute inset-0 w-full h-full z-0 bg-gray-200 dark:bg-gray-900 transition-colors">
       <div ref={mapContainerRef} className="w-full h-full" />
-      
       {!readOnly && (
         <div className={`absolute right-4 flex flex-col gap-4 pointer-events-auto z-[400] transition-all duration-300 ease-in-out`} style={{ top: isSheetExpanded ? '120px' : '160px' }}>
             <div className={`flex flex-col gap-4 transition-all duration-300 ${isZenMode ? 'opacity-0 translate-x-10 pointer-events-none absolute' : 'opacity-100 translate-x-0'}`}>
@@ -224,7 +213,6 @@ export const RunMap: React.FC<RunMapProps> = ({
                     <button onClick={handleZoomOut} className="w-12 h-12 flex items-center justify-center active:bg-gray-50 dark:active:bg-gray-700 text-gray-700 dark:text-gray-200"><Minus size={24} /></button>
                 </div>
             </div>
-            
             <button onClick={() => { triggerHaptic(50); if(onToggleZenMode) onToggleZenMode(); }} className={`w-12 h-12 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex items-center justify-center active:scale-95 transition-all text-gray-600 dark:text-gray-200 ${isZenMode ? 'bg-blue-600 dark:bg-blue-600 text-white dark:text-white' : ''}`}>
                 <Eye size={20} />
             </button>

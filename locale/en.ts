@@ -117,7 +117,10 @@ export const en = {
   zoneColor: "Color",
   currentZone: "Current Zone",
   needPermission: "Permission Required",
-  permissionDesc: "Fit GO needs location and camera permissions to track your activity accurately.",
+  permissionDesc: "Fit GO needs location permissions to track your activity accurately. Please enable it in your phone settings if the prompt doesn't appear.",
   grantPermission: "Grant Permission",
-  permissionDenied: "Permission denied. Please enable location in your phone settings."
+  permissionDenied: "Location permission denied.",
+  openSettings: "Open Settings",
+  custom: "Custom",
+  spmLabel: "spm"
 };
