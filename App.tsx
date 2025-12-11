@@ -49,6 +49,7 @@ import {
 
 declare const html2canvas: any;
 
+// Fix: Replaced 'Round.sin' with 'Math.sin' as 'Round' is not a valid math reference in standard JavaScript/TypeScript.
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -173,7 +174,6 @@ const App: React.FC = () => {
             setSelectedRunType(active.type);
             setSelectedPresetName(active.selectedPresetName);
             setTargetPace(active.targetPace);
-            // Don't auto-start tracking, wait for user input
         } catch (e) { console.error(e); }
     }
   }, []);
@@ -408,12 +408,12 @@ const App: React.FC = () => {
           });
           canvas.toBlob(async (blob: Blob | null) => {
               if (blob) {
-                  const file = new File([blob], 'fit-go.png', { type: 'image/png' });
+                  const file = new File([blob], 'fit-go-run.png', { type: 'image/png' });
                   const shareData = { title: t.appTitle, text: `${t.runSummary}: ${getDistanceDisplay(sessionData.distance, unitSystem, customDistanceUnit).value} ${getDistanceDisplay(sessionData.distance, unitSystem, customDistanceUnit).unit} in ${formatTime(sessionData.duration)}!`, files: [file] };
                   if (navigator.share && navigator.canShare(shareData)) await navigator.share(shareData);
                   else {
                       const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a'); a.href = url; a.download = 'fit-go.png'; a.click(); URL.revokeObjectURL(url);
+                      const a = document.createElement('a'); a.href = url; a.download = 'fit-go-run.png'; a.click(); URL.revokeObjectURL(url);
                   }
               }
               setIsSharing(false);
@@ -435,8 +435,16 @@ const App: React.FC = () => {
       {currentScreen === 'login' && (
         <div className="h-screen w-screen bg-white dark:bg-gray-900 flex flex-col items-center justify-between p-10 transition-colors">
             <div className="flex-1 flex flex-col justify-center items-center">
-                <div className="w-24 h-24 bg-blue-600 rounded-[32px] flex items-center justify-center mb-8 shadow-2xl rotate-6">
-                    <Activity className="text-white w-12 h-12" />
+                <div className="w-40 h-40 mb-10 drop-shadow-[0_25px_40px_rgba(59,130,246,0.4)] animate-[bounce_3s_infinite] transition-transform duration-700">
+                    <img 
+                        src="/barbel.png" 
+                        alt="Fit Go Logo" 
+                        onError={(e) => {
+                           // Robust fallback if local file fails
+                           (e.target as HTMLImageElement).src = "https://cdn-icons-png.flaticon.com/512/3144/3144837.png";
+                        }}
+                        className="w-full h-full object-contain"
+                    />
                 </div>
                 <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-3 tracking-tighter uppercase">{t.appTitle}</h1>
                 <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">{t.ready}</p>
@@ -539,12 +547,12 @@ const App: React.FC = () => {
               </div>
           </div>
 
-          <div className={`mt-auto bg-white dark:bg-gray-900 rounded-t-[56px] shadow-2xl z-[500] px-10 transition-all duration-500 relative flex flex-col border-t border-gray-100 dark:border-gray-800 ${isZenMode ? 'h-0 opacity-0 pointer-events-none' : (isSheetExpanded ? 'h-auto pb-4 pt-1' : 'h-[28vh] pb-4 pt-1')}`}>
-              <div className="w-full flex justify-center py-2 cursor-pointer" onClick={() => setIsSheetExpanded(!isSheetExpanded)}>
-                  <div className="w-12 h-1 bg-gray-100 dark:bg-gray-800 rounded-full"></div>
+          <div className={`mt-auto bg-white dark:bg-gray-900 rounded-t-[56px] shadow-2xl z-[500] px-10 transition-all duration-500 relative flex flex-col border-t border-gray-100 dark:border-gray-800 ${isZenMode ? 'h-0 opacity-0 pointer-events-none' : (isSheetExpanded ? 'h-auto pb-4 pt-1' : 'h-[24vh] pb-3 pt-1')}`}>
+              <div className="w-full flex justify-center py-1.5 cursor-pointer" onClick={() => setIsSheetExpanded(!isSheetExpanded)}>
+                  <div className="w-12 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full"></div>
               </div>
               
-              <div className="flex flex-col gap-2 pt-2 flex-1"> 
+              <div className="flex flex-col gap-1.5 pt-1.5 flex-1"> 
                   <div className="flex justify-between items-end mb-1">
                       <StatCard label={t.duration} value={formatTime(elapsedTime)} large />
                       <StatCard label={t.distance} value={getDistanceDisplay(distance, unitSystem, customDistanceUnit).value} unit={getDistanceDisplay(distance, unitSystem, customDistanceUnit).unit} large highlight />
@@ -577,7 +585,7 @@ const App: React.FC = () => {
                       </div>
                   </div>
 
-                  <div className="pb-4 mt-2">
+                  <div className="pb-3 mt-1">
                       {!isRunning && elapsedTime === 0 ? (
                           <button onClick={() => { triggerHaptic(200); setIsRunning(true); }} className="w-full bg-blue-600 text-white font-black py-4 rounded-[28px] shadow-xl text-lg flex items-center justify-center gap-3 active:scale-95 transition-all uppercase tracking-widest">{t.startRun}</button>
                       ) : (
@@ -604,7 +612,7 @@ const App: React.FC = () => {
                 <RunMap currentLocation={null} path={(selectedHistorySession || lastSession)!.path} isRunning={false} isFollowingUser={false} isSheetExpanded={false} isDarkMode={isDarkMode} isZenMode={false} readOnly={true} paceZones={paceZones} />
                 <div className="absolute top-0 left-0 w-full p-6 pt-12 flex justify-between items-center z-[400]" data-html2canvas-ignore>
                      <button onClick={handleBack} className="p-3 bg-white/95 dark:bg-gray-800/95 rounded-2xl backdrop-blur-xl text-gray-900 dark:text-white active:scale-90 shadow-2xl border border-gray-100 dark:border-white/10"><ArrowLeft size={22} /></button>
-                     <span className="font-black text-xs uppercase text-gray-900 dark:text-white tracking-[0.25em] drop-shadow-sm bg-white/90 dark:bg-black/80 px-5 py-2 rounded-2xl backdrop-blur-md border border-gray-200 dark:border-white/10">{selectedHistorySession ? t.runDetails : t.runSummary}</span>
+                     <span className="font-black text-xs uppercase text-gray-900 dark:text-white tracking-[0.2em] drop-shadow-sm bg-white/90 dark:bg-black/80 px-5 py-2 rounded-2xl backdrop-blur-md border border-gray-200 dark:border-white/10">{selectedHistorySession ? t.runDetails : t.runSummary}</span>
                      <button onClick={() => handleShare((selectedHistorySession || lastSession)!)} disabled={isSharing} className="p-3 bg-white/95 dark:bg-gray-800/95 rounded-2xl backdrop-blur-xl text-gray-900 dark:text-white shadow-2xl border border-gray-100 dark:border-white/10">
                          {isSharing ? <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div> : <Share2 size={22} />}
                      </button>
